@@ -35,6 +35,7 @@ origins <- here("data",
                             TotalHHIncome == "From 1,801 to 2,700 Euros" ~ "1. Middle")) |>
   mutate(Gender = ifelse(Gender == "Male", "1. Male", "2. Female")) |>
   select(id, 
+         Age,
          no_car,
          WorkStatus,
          LivesWithSpousePartner,
@@ -251,14 +252,37 @@ no_car_access_vars <- origins_with_access |>
          ag_no_car_access_std,
          outdoor_rec_no_car_access_std)
 
+ag_ind_vars <- origins_with_access |>
+  select(ag_no_car_access_std,
+         ag_car_access_std,
+         industrial_no_car_access_std,
+         industrial_car_access_std)
+
 cor(car_access_vars)
 
 cor(no_car_access_vars)
+
+cor(ag_ind_vars)
+
+mean(origins_with_access$area_weekday)
+sd(origins_with_access$area_weekday)
+
+mean(origins_with_access$area_weekend)
+sd(origins_with_access$area_weekend)
+
+mean(origins_with_access$Age)
+sd(origins_with_access$Age)
 
 mean(origins_with_access$no_car)
 
 mean(origins_with_access$car_access)
 sd(origins_with_access$car_access)
+
+mean(origins_with_access$industrial_car_access_std)
+sd(origins_with_access$industrial_car_access_std)
+
+mean(origins_with_access$ag_car_access_std)
+sd(origins_with_access$ag_car_access_std)
 
 mean(origins_with_access$no_car_access)
 sd(origins_with_access$no_car_access)
@@ -276,6 +300,7 @@ table(origins_with_access$LivesWithFatherMother) / nrow(origins_with_access)
 table(origins_with_access$Income) / nrow(origins_with_access)
 
 weekday_area_model <- lm(log(area_weekday) ~
+                           Age +
                            Income +
                            Gender +
                            WorkStatus +
@@ -283,6 +308,10 @@ weekday_area_model <- lm(log(area_weekday) ~
                            LivesWithSpousePartner +
                            LivesWithFatherMother +
                            no_car +
+                           ag_car_access_std +
+                           ag_no_car_access_std +
+                           industrial_car_access_std +
+                           industrial_no_car_access_std +
                            car_access +
                            no_car_access +
                            no_car:no_car_access +
@@ -292,6 +321,7 @@ weekday_area_model <- lm(log(area_weekday) ~
 summary(weekday_area_model)
 
 weekend_area_model <- lm(log(area_weekend) ~
+                           Age +
                            Income +
                            Gender +
                            WorkStatus +
@@ -299,6 +329,10 @@ weekend_area_model <- lm(log(area_weekend) ~
                            LivesWithSpousePartner +
                            LivesWithFatherMother +
                            no_car +
+                           ag_car_access_std +
+                           ag_no_car_access_std +
+                           industrial_car_access_std +
+                           industrial_no_car_access_std +
                            car_access +
                            no_car_access +
                            no_car:no_car_access +
