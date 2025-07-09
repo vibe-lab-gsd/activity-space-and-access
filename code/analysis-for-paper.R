@@ -5,8 +5,12 @@ library(sf)
 library(here)
 library(r5r)
 library(sfarrow)
+library(maptiles)
+library(tidyterra)
+library(ggmap)
 
-## Load origin and destination points
+###################################################
+## Load (and recode) origin data
 
 origins <- here("data",
                 "origins.geojson") |>
@@ -46,6 +50,9 @@ origins <- here("data",
          area_weekday,
          area_weekend)
 
+#############################################################################
+## Count and filter out missing values by variable
+
 sum(is.na(origins$no_car))
 
 origins <- origins |>
@@ -61,6 +68,9 @@ sum(is.na(origins$Income))
 origins <- origins |>
   filter(!is.na(Income)) 
 
+######################################################################
+## Load and recode destination data
+
 destinations <- here("data",
                      "destinations.parquet") |>
   st_read_parquet() |>
@@ -68,6 +78,9 @@ destinations <- here("data",
   mutate(use = ifelse(use == "culture/recreation (indoor)", "leisure", use)) |>
   mutate(use = ifelse(use == "retail/restaurant", "leisure", use)) |>
   mutate(use = ifelse(use == "culture/recreation (outdoor)", "outdoor rec", use))
+
+##########################################################################
+## Set up R5 analysis
 
 july_2nd_9am <- as.POSIXct(
   "02-07-2025 09:00:00",
@@ -104,6 +117,9 @@ std_access = function(my_use,
     select(id, accessibility, std_access)
 
 }
+
+######################################################################
+## Calculate 12 accessibility metrics
 
 leisure_car <- std_access(my_use = "leisure",
                               my_origins = origins,
@@ -213,6 +229,12 @@ res_no_car <- std_access(my_use = "residential",
   rename(res_car_no_access = accessibility,
          res_car_no_access_std = std_access)
 
+stop_r5()
+
+##################################################################
+## Join accessibility to origin data and average the accessibilty scores that
+## are highly correlated.
+
 origins_with_access <- origins |>
   left_join(leisure_car) |>
   left_join(industrial_car) |>
@@ -226,7 +248,6 @@ origins_with_access <- origins |>
   left_join(res_no_car) |>
   left_join(ag_no_car) |>
   left_join(outdoor_rec_no_car) |>
-  st_drop_geometry() |>
   mutate(car_access = (leisure_car_access_std +
                        service_car_access_std +
                        res_car_access_std +
@@ -236,7 +257,11 @@ origins_with_access <- origins |>
                             res_car_no_access_std +
                             outdoor_rec_no_car_access_std) / 4)
 
+#####################################################################
+## Confirm the correlations of the ones we combined.
+
 car_access_vars <- origins_with_access |>
+  st_drop_geometry() |>
   select(leisure_car_access_std,
          industrial_car_access_std,
          service_car_access_std,
@@ -245,6 +270,7 @@ car_access_vars <- origins_with_access |>
          outdoor_rec_car_access_std)
 
 no_car_access_vars <- origins_with_access |>
+  st_drop_geometry() |>
   select(leisure_no_car_access_std,
          industrial_no_car_access_std,
          service_no_car_access_std,
@@ -253,6 +279,7 @@ no_car_access_vars <- origins_with_access |>
          outdoor_rec_no_car_access_std)
 
 ag_ind_vars <- origins_with_access |>
+  st_drop_geometry() |>
   select(ag_no_car_access_std,
          ag_car_access_std,
          industrial_no_car_access_std,
@@ -263,6 +290,26 @@ cor(car_access_vars)
 cor(no_car_access_vars)
 
 cor(ag_ind_vars)
+
+###########################################################################
+## Accessibilty maps
+
+## Note that this l
+map_origins <- origins |>
+  st_crop(c(xmin = -3.8,
+            xmax = -3.5,
+            ymin = 37.1,
+            ymax = 37.3))
+
+base_map <- get_tiles(map_origins,
+                      provider = "Stadia.StamenTonerLite")
+
+ggplot(map_origins) +
+  geom_spatraster_rgb()
+  geom_sf(data = map_origins,
+          aes(color = no_car_access),
+          size = 1) +
+  scale_color_gradient2()
 
 mean(origins_with_access$area_weekday)
 sd(origins_with_access$area_weekday)
