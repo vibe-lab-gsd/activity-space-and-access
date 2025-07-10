@@ -7,7 +7,9 @@ library(r5r)
 library(sfarrow)
 library(maptiles)
 library(tidyterra)
-library(ggmap)
+library(ggthemes)
+library(scales)
+library(ggspatial)
 
 ###################################################
 ## Load (and recode) origin data
@@ -295,21 +297,113 @@ cor(ag_ind_vars)
 ## Accessibilty maps
 
 ## Note that this l
-map_origins <- origins |>
-  st_crop(c(xmin = -3.8,
+map_origins <- origins_with_access |>
+  st_crop(c(xmin = -3.7,
             xmax = -3.5,
             ymin = 37.1,
-            ymax = 37.3))
+            ymax = 37.25))
 
 base_map <- get_tiles(map_origins,
-                      provider = "Stadia.StamenTonerLite")
+                      provider = "Stadia.StamenTonerLines",
+                      crop = TRUE,
+                      zoom = 11)
 
 ggplot(map_origins) +
-  geom_spatraster_rgb()
+  geom_spatraster_rgb(data = base_map) +
+  geom_sf(data = map_origins,
+          aes(color = car_access),
+          size = 0.5) +
+  scale_color_gradient2(limits = c(-1.5, 1.5), mid = "yellow") +
+  theme_map() +
+  theme(legend.position = "none") 
+
+ggsave(here("figures", "car-access-map.png"), 
+       dpi = 600, 
+       width = 3, 
+       height = 3, 
+       units = "in")
+
+ggplot(map_origins) +
+  geom_spatraster_rgb(data = base_map) +
   geom_sf(data = map_origins,
           aes(color = no_car_access),
-          size = 1) +
-  scale_color_gradient2()
+          size = 0.5) +
+  scale_color_gradient2(limits = c(-1.5, 1.5), mid = "yellow") +
+  theme_map() +
+  theme(legend.position = "none")
+
+ggsave(here("figures", "no-car-access-map.png"), 
+       dpi = 600, 
+       width = 3, 
+       height = 3, 
+       units = "in")
+
+ggplot(map_origins) +
+  geom_spatraster_rgb(data = base_map) +
+  geom_sf(data = map_origins,
+          aes(color = ag_no_car_access_std),
+          size = 0.5) +
+  scale_color_gradient2(limits = c(-1.5, 1.5), mid = "yellow") +
+  theme_map() +
+  theme(legend.position = "none")
+
+ggsave(here("figures", "ag-no-car-access-map.png"), 
+       dpi = 600, 
+       width = 3, 
+       height = 3, 
+       units = "in")
+
+ggplot(map_origins) +
+  geom_spatraster_rgb(data = base_map) +
+  geom_sf(data = map_origins,
+          aes(color = ag_car_access_std),
+          size = 0.5) +
+  scale_color_gradient2(limits = c(-1.5, 1.5), mid = "yellow") +
+  theme_map() +
+  theme(legend.position = "none")
+
+ggsave(here("figures", "ag-car-access-map.png"), 
+       dpi = 600, 
+       width = 3, 
+       height = 3, 
+       units = "in")
+
+ggplot(map_origins) +
+  geom_spatraster_rgb(data = base_map) +
+  geom_sf(data = map_origins,
+          aes(color = industrial_no_car_access_std),
+          size = 0.5) +
+  scale_color_gradient2(limits = c(-1.5, 1.5), mid = "yellow") +
+  theme_map() +
+  theme(legend.position = "none") +
+  annotation_scale(location = "br",
+                   pad_x = unit(0.2, "in"),
+                   pad_y = unit(0.2, "in"))
+
+ggsave(here("figures", "ind-no-car-access-map.png"), 
+       dpi = 600, 
+       width = 3, 
+       height = 3, 
+       units = "in")
+
+ggplot(map_origins) +
+  geom_spatraster_rgb(data = base_map) +
+  geom_sf(data = map_origins,
+          aes(color = industrial_car_access_std),
+          size = 0.5) +
+  scale_color_gradient2(limits = c(-1.5, 1.5), mid = "yellow",
+                        name = "Accessibilty\n(standard\ndeviations\nfrom mean)") +
+  theme_map() +
+  theme(legend.background = element_rect(fill = alpha("gray", 0.7)))
+
+ggsave(here("figures", "ind-car-access-map.png"), 
+       dpi = 600, 
+       width = 3, 
+       height = 3, 
+       units = "in")
+
+####################################################################
+## Descriptive statistics
 
 mean(origins_with_access$area_weekday)
 sd(origins_with_access$area_weekday)
@@ -345,6 +439,9 @@ table(origins_with_access$LivesWithSpousePartner) / nrow(origins_with_access)
 table(origins_with_access$LivesWithFatherMother) / nrow(origins_with_access)
 
 table(origins_with_access$Income) / nrow(origins_with_access)
+
+#################################################################
+## Models
 
 weekday_area_model <- lm(log(area_weekday) ~
                            Age +
@@ -388,4 +485,293 @@ weekend_area_model <- lm(log(area_weekend) ~
 
 summary(weekend_area_model)
 
+####################################################################
+## Weekday prediction figure
 
+predict_weekday <- tibble(no_car_access = c(-2, 2)) |>
+  mutate(Age = mean(origins_with_access$Age),
+                    Income = "1. Middle",
+                    Gender = "1. Male",
+                    WorkStatus = "1. Non-worker",
+                    LivesWithChildren = "No",
+                    LivesWithSpousePartner = "No",
+                    LivesWithFatherMother = "No",
+                    no_car = FALSE,
+                    ag_car_access_std = 0,
+                    ag_no_car_access_std = 0,
+                    industrial_car_access_std = 0,
+                    industrial_no_car_access_std = 0,
+                    car_access = 0)
+
+area_predict_wkday <- predict(weekday_area_model, 
+                              newdata = predict_weekday, 
+                              interval = "confidence") |>
+  exp() 
+
+radius_predict_wkday <- (area_predict_wkday / pi)^0.5
+
+radius_predict_wkday
+
+center_point <- tibble(x = -3.6,
+                       y = 37.175) |>
+  st_as_sf(coords = c("x", "y"),
+           crs = "WGS84")
+
+small_lwr_area <- center_point |>
+  st_buffer(dist = radius_predict_wkday[4] * 1000)
+
+small_mid_area <- center_point |>
+  st_buffer(dist = radius_predict_wkday[2] * 1000)
+
+small_upr_area <- center_point |>
+  st_buffer(dist = radius_predict_wkday[6] * 1000)
+
+big_lwr_area <- center_point |>
+  st_buffer(dist = radius_predict_wkday[3] * 1000)
+
+big_mid_area <- center_point |>
+  st_buffer(dist = radius_predict_wkday[1] * 1000)
+
+big_upr_area <- center_point |>
+  st_buffer(dist = radius_predict_wkday[5] * 1000)
+
+small_area <- st_difference(small_upr_area, small_lwr_area)
+big_area <- st_difference(big_upr_area, big_lwr_area)
+
+ggplot(small_area) + 
+  geom_spatraster_rgb(data = base_map) +
+  geom_sf(color = NA, aes(fill = "Two standard deviations above\nmean car-free accessibility"), alpha = 0.5) +
+  geom_sf(data = small_mid_area,
+          aes(color = "Two standard deviations above\nmean car-free accessibility"),
+          fill = NA,
+          key_glyph = "abline") +
+  geom_sf(data = big_area,
+          color = NA, aes(fill = "Two standard deviations below\nmean car-free accessibility"), alpha = 0.5) +
+  geom_sf(data = big_mid_area,
+          aes(color = "Two standard deviations below\nmean car-free accessibility"), 
+          fill = NA,
+          key_glyph = "abline") +
+  scale_color_manual(values = c(muted("blue"), muted("red"))) +
+  scale_fill_manual(values = c(muted("blue"), muted("red"))) +
+  theme_map() +
+  annotation_scale(location = "br") +
+  theme(legend.background = element_rect(fill = alpha("gray", 0.7))) +
+  labs(color  = "95-percent confidence interval\nfor predicted activity space area", 
+       fill = "95-percent confidence interval\nfor predicted activity space area")
+
+ggsave(here("figures", "weekday-comparison.png"), 
+       dpi = 600, 
+       width = 4, 
+       height = 4, 
+       units = "in")
+
+#######################################################################
+## Weekend prediction figures
+
+predict_weekend <- tibble(no_car = c(rep(TRUE, 3), rep(FALSE, 3)),
+                          Income = rep(c("1. Middle",
+                                     "2. Low",
+                                     "5. High"), 2)) |>
+  mutate(Age = mean(origins_with_access$Age),
+         Gender = "1. Male",
+         WorkStatus = "1. Non-worker",
+         LivesWithChildren = "No",
+         LivesWithSpousePartner = "No",
+         LivesWithFatherMother = "No",
+         ag_car_access_std = 0,
+         ag_no_car_access_std = 0,
+         industrial_car_access_std = 0,
+         industrial_no_car_access_std = 0,
+         car_access = 0,
+         no_car_access = 0)
+
+area_predict_wkend <- predict(weekend_area_model, 
+                              newdata = predict_weekend, 
+                              interval = "confidence") |>
+  exp() 
+
+radius_predict_wkend <- (area_predict_wkend / pi)^0.5 |> 
+  as_tibble() |>
+  cbind(predict_weekend) |>
+  select(no_car, Income, fit, lwr, upr)
+
+radius_predict_wkend 
+
+car_free_low.inc_pred <- center_point |>
+  st_buffer(dist = radius_predict_wkend$fit[
+    radius_predict_wkend$no_car & 
+      radius_predict_wkend$Income == "2. Low"] * 1000)
+
+car_free_mid.inc_pred <- center_point |>
+  st_buffer(dist = radius_predict_wkend$fit[
+    radius_predict_wkend$no_car & 
+      radius_predict_wkend$Income == "1. Middle"] * 1000)
+
+car_free_hi.inc_pred <- center_point |>
+  st_buffer(dist = radius_predict_wkend$fit[
+    radius_predict_wkend$no_car & 
+      radius_predict_wkend$Income == "5. High"] * 1000)
+
+car_low.inc_pred <- center_point |>
+  st_buffer(dist = radius_predict_wkend$fit[
+    radius_predict_wkend$no_car == FALSE & 
+      radius_predict_wkend$Income == "2. Low"] * 1000)
+
+car_mid.inc_pred <- center_point |>
+  st_buffer(dist = radius_predict_wkend$fit[
+    radius_predict_wkend$no_car == FALSE & 
+      radius_predict_wkend$Income == "1. Middle"] * 1000)
+
+car_hi.inc_pred <- center_point |>
+  st_buffer(dist = radius_predict_wkend$fit[
+    radius_predict_wkend$no_car == FALSE & 
+      radius_predict_wkend$Income == "5. High"] * 1000)
+
+car_free_low.inc_lwr <- center_point |>
+  st_buffer(dist = radius_predict_wkend$lwr[
+    radius_predict_wkend$no_car & 
+      radius_predict_wkend$Income == "2. Low"] * 1000)
+
+car_free_mid.inc_lwr <- center_point |>
+  st_buffer(dist = radius_predict_wkend$lwr[
+    radius_predict_wkend$no_car & 
+      radius_predict_wkend$Income == "1. Middle"] * 1000)
+
+car_free_hi.inc_lwr <- center_point |>
+  st_buffer(dist = radius_predict_wkend$lwr[
+    radius_predict_wkend$no_car & 
+      radius_predict_wkend$Income == "5. High"] * 1000)
+
+car_low.inc_lwr <- center_point |>
+  st_buffer(dist = radius_predict_wkend$lwr[
+    radius_predict_wkend$no_car == FALSE & 
+      radius_predict_wkend$Income == "2. Low"] * 1000)
+
+car_mid.inc_lwr <- center_point |>
+  st_buffer(dist = radius_predict_wkend$lwr[
+    radius_predict_wkend$no_car == FALSE & 
+      radius_predict_wkend$Income == "1. Middle"] * 1000)
+
+car_hi.inc_lwr <- center_point |>
+  st_buffer(dist = radius_predict_wkend$lwr[
+    radius_predict_wkend$no_car == FALSE & 
+      radius_predict_wkend$Income == "5. High"] * 1000)
+
+car_free_low.inc_upr <- center_point |>
+  st_buffer(dist = radius_predict_wkend$upr[
+    radius_predict_wkend$no_car & 
+      radius_predict_wkend$Income == "2. Low"] * 1000)
+
+car_free_mid.inc_upr <- center_point |>
+  st_buffer(dist = radius_predict_wkend$upr[
+    radius_predict_wkend$no_car & 
+      radius_predict_wkend$Income == "1. Middle"] * 1000)
+
+car_free_hi.inc_upr <- center_point |>
+  st_buffer(dist = radius_predict_wkend$upr[
+    radius_predict_wkend$no_car & 
+      radius_predict_wkend$Income == "5. High"] * 1000)
+
+car_low.inc_upr <- center_point |>
+  st_buffer(dist = radius_predict_wkend$upr[
+    radius_predict_wkend$no_car == FALSE & 
+      radius_predict_wkend$Income == "2. Low"] * 1000)
+
+car_mid.inc_upr <- center_point |>
+  st_buffer(dist = radius_predict_wkend$upr[
+    radius_predict_wkend$no_car == FALSE & 
+      radius_predict_wkend$Income == "1. Middle"] * 1000)
+
+car_hi.inc_upr <- center_point |>
+  st_buffer(dist = radius_predict_wkend$upr[
+    radius_predict_wkend$no_car == FALSE & 
+      radius_predict_wkend$Income == "5. High"] * 1000)
+
+car_free_low.inc_area <- st_difference(car_free_low.inc_upr, 
+                                       car_free_low.inc_lwr)
+car_free_mid.inc_area <- st_difference(car_free_mid.inc_upr, 
+                                       car_free_mid.inc_lwr)
+car_free_hi.inc_area <- st_difference(car_free_hi.inc_upr, 
+                                      car_free_hi.inc_lwr)
+car_low.inc_area <- st_difference(car_low.inc_upr, 
+                                  car_low.inc_lwr)
+car_mid.inc_area <- st_difference(car_mid.inc_upr, 
+                                  car_mid.inc_lwr)
+car_hi.inc_area <- st_difference(car_hi.inc_upr, 
+                                 car_hi.inc_lwr)
+
+
+ggplot(car_hi.inc_area) + 
+  geom_spatraster_rgb(data = base_map) +
+  geom_sf(color = NA, aes(fill = "Household has one\nor more cars"), alpha = 0.5) +
+  geom_sf(data = car_hi.inc_pred,
+          aes(color = "Household has one\nor more cars"),
+          fill = NA,
+          key_glyph = "abline") +
+  geom_sf(data = car_free_hi.inc_area,
+          color = NA, aes(fill = "Car-free household"), alpha = 0.5) +
+  geom_sf(data = car_free_hi.inc_pred,
+          aes(color = "Car-free household"), 
+          fill = NA,
+          key_glyph = "abline") +
+  scale_color_manual(values = c(muted("blue"), muted("red"))) +
+  scale_fill_manual(values = c(muted("blue"), muted("red"))) +
+  theme_map() +
+  annotation_scale(location = "br") +
+  theme(legend.background = element_rect(fill = alpha("gray", 0.7))) +
+  labs(color  = "95-percent confidence\ninterval for predicted\nactivity space area", 
+       fill = "95-percent confidence\ninterval for predicted\nactivity space area")
+
+ggsave(here("figures", "hi-inc-wkend.png"), 
+       dpi = 600, 
+       width = 3, 
+       height = 3, 
+       units = "in")
+
+ggplot(car_mid.inc_area) + 
+  geom_spatraster_rgb(data = base_map) +
+  geom_sf(color = NA, aes(fill = "Household has one\nor more cars"), alpha = 0.5) +
+  geom_sf(data = car_mid.inc_pred,
+          aes(color = "Household has\none or more cars"),
+          fill = NA,
+          key_glyph = "abline") +
+  geom_sf(data = car_free_mid.inc_area,
+          color = NA, aes(fill = "Car-free household"), alpha = 0.5) +
+  geom_sf(data = car_free_mid.inc_pred,
+          aes(color = "Car-free household"), 
+          fill = NA,
+          key_glyph = "abline") +
+  scale_color_manual(values = c(muted("blue"), muted("red"))) +
+  scale_fill_manual(values = c(muted("blue"), muted("red"))) +
+  theme_map() +
+  theme(legend.position = "none")
+
+ggsave(here("figures", "mid-inc-wkend.png"), 
+       dpi = 600, 
+       width = 3, 
+       height = 3, 
+       units = "in")
+
+ggplot(car_low.inc_area) + 
+  geom_spatraster_rgb(data = base_map) +
+  geom_sf(color = NA, aes(fill = "Household has one\nor more cars"), alpha = 0.5) +
+  geom_sf(data = car_low.inc_pred,
+          aes(color = "Household has one\nor more cars"),
+          fill = NA,
+          key_glyph = "abline") +
+  geom_sf(data = car_free_low.inc_area,
+          color = NA, aes(fill = "Car-free household"), alpha = 0.5) +
+  geom_sf(data = car_free_low.inc_pred,
+          aes(color = "Car-free household"), 
+          fill = NA,
+          key_glyph = "abline") +
+  scale_color_manual(values = c(muted("blue"), muted("red"))) +
+  scale_fill_manual(values = c(muted("blue"), muted("red"))) +
+  theme_map() +
+  theme(legend.position = "none") 
+
+ggsave(here("figures", "low-inc-wkend.png"), 
+       dpi = 600, 
+       width = 3, 
+       height = 3, 
+       units = "in")
